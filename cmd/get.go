@@ -1,28 +1,98 @@
-/*
-Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
-*/
 package cmd
 
 import (
+	"errors"
 	"fmt"
-
+	"github.com/baerla/inzidenz-cli/config"
 	"github.com/spf13/cobra"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"regexp"
+	"strings"
 )
 
 // getCmd represents the get command
 var getCmd = &cobra.Command{
-	Use:   "get",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "get [[city]|[url]]",
+	Short: "Gets current covid incidence of a city",
+	Long: `Gets current covid incidence of a city by extracting 
+the current incidence out of their homepage.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("get called")
+		conf := config.GetConfig()
+		if len(args) == 0 {
+			for _, city := range conf.Cities {
+				printIncidenceForCity(&city)
+			}
+			return
+		} else if len(args) == 1 {
+			for _, city := range conf.Cities {
+				if city.Name == args[0] {
+					printIncidenceForCity(&city)
+					return
+				}
+			}
+			return
+		} else if len(args) == 2 {
+			printIncidenceForCity(&config.City{Name: args[0], URL: args[1]})
+			return
+		} else {
+			fmt.Println("Too many arguments provided")
+			return
+		}
 	},
+}
+
+func printIncidenceForCity(city *config.City) {
+	num, err := getIncidenceForCity(city)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%s: %s\n", city.Name, num)
+}
+
+func getIncidenceForCity(city *config.City) (string, error) {
+	num := ""
+	// extract incidence from webpage
+	content := getContentOfWebpage(city.URL)
+
+	pattern := `(?sU)(7[ ,-]+Tage[ ,-]+)?Inzidenz.+(?P<incidence>[\d]*\.?[\d]+,\d+)\s*<`
+
+	// check if some incidence can be extracted
+	matched, err := regexp.MatchString(pattern, content)
+	if err != nil {
+		panic(err)
+	}
+	if !matched {
+		panic(errors.New("no incidence found for " + city.Name))
+	}
+	regex := regexp.MustCompile(pattern)
+	match := regex.FindAllStringSubmatch(content, -1)
+	num = match[0][2]
+
+	return strings.ReplaceAll(num, ".", ""), nil
+}
+
+func getContentOfWebpage(url string) string {
+	// extract content from webpage
+	response, err := http.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(response.Body)
+
+	if response.StatusCode != 200 {
+		panic(response.Status)
+	}
+
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(body)
 }
 
 func init() {
