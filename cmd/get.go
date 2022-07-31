@@ -21,9 +21,7 @@ the current incidence out of their homepage.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		conf := config.GetConfig()
 		if len(args) == 0 {
-			for _, city := range conf.Cities {
-				printIncidenceForCity(&city)
-			}
+			printIncidenceForCities(conf.Cities)
 			return
 		} else if len(args) == 1 {
 			for _, city := range conf.Cities {
@@ -48,7 +46,35 @@ func printIncidenceForCity(city *config.City) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%s: %s\n", city.Name, num)
+	printIncidence(city.Name, num, len(city.Name), len(num))
+}
+
+func printIncidence(name string, incidence string, paddingName int, paddingIncidence int) {
+	fmt.Printf("%*s  %*s\n", paddingName, name, paddingIncidence, incidence)
+}
+
+func printIncidenceForCities(cities []config.City) {
+	rows := make(map[string]string, len(cities))
+	longestName := 0
+	longestIncidence := 0
+	for _, city := range cities {
+		incidence, err := getIncidenceForCity(&city)
+		if err != nil {
+			panic(err)
+		}
+		rows[city.Name] = incidence
+
+		if len(city.Name) > longestName {
+			longestName = len(city.Name)
+		}
+		if len(incidence) > longestIncidence {
+			longestIncidence = len(incidence)
+		}
+	}
+
+	for name, incidence := range rows {
+		printIncidence(name, incidence, longestName, longestIncidence)
+	}
 }
 
 func getIncidenceForCity(city *config.City) (string, error) {
