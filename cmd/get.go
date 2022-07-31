@@ -9,8 +9,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 )
+
+var sorting string
 
 // getCmd represents the get command
 var getCmd = &cobra.Command{
@@ -46,11 +50,11 @@ func printIncidenceForCity(city *config.City) {
 	if err != nil {
 		panic(err)
 	}
-	printIncidence(city.Name, num, len(city.Name), len(num))
+	fmt.Print(getFormattedRow(city.Name, num, len(city.Name), len(num)))
 }
 
-func printIncidence(name string, incidence string, paddingName int, paddingIncidence int) {
-	fmt.Printf("%*s  %*s\n", paddingName, name, paddingIncidence, incidence)
+func getFormattedRow(name string, incidence string, paddingName int, paddingIncidence int) string {
+	return fmt.Sprintf("%*s  %*s\n", paddingName, name, paddingIncidence, incidence)
 }
 
 func printIncidenceForCities(cities []config.City) {
@@ -72,8 +76,29 @@ func printIncidenceForCities(cities []config.City) {
 		}
 	}
 
-	for name, incidence := range rows {
-		printIncidence(name, incidence, longestName, longestIncidence)
+	names := make([]string, len(cities))
+	for name := range rows {
+		names = append(names, name)
+	}
+	names = names[5:]
+
+	switch sorting {
+	case "incidence":
+		sort.SliceStable(names, func(i, j int) bool {
+			left, errL := strconv.ParseFloat(strings.ReplaceAll(rows[names[i]], ",", "."), 32)
+			right, errR := strconv.ParseFloat(strings.ReplaceAll(rows[names[j]], ",", "."), 32)
+			if errL == nil || errR == nil {
+				// sort descending
+				return left > right
+			} else {
+				panic("could not parse incidence" + errL.Error() + errR.Error())
+			}
+		})
+	case "name":
+		sort.Strings(names)
+	}
+	for _, name := range names {
+		fmt.Print(getFormattedRow(name, rows[name], longestName, longestIncidence))
 	}
 }
 
@@ -128,7 +153,7 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	// getCmd.PersistentFlags().String("foo", "", "A help for foo")
+	getCmd.PersistentFlags().StringVarP(&sorting, "sort", "s", "incidence", "sort by [incidence] or [name]")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
